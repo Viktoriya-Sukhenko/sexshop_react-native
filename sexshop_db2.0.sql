@@ -1,0 +1,1 @@
+SELECT * FROM sexshop_db.colors;

@@ -28,6 +28,8 @@ const countriesRouter = require('./routes/countries');
 const authRoutes = require('./routes/auth');
 const paymentMethodsRoute = require('./routes/paymentMethods');
 const orderRoutes = require("./routes/orders"); 
+const cartRoutes = require("./routes/cart");
+const reviewsRouter = require("./routes/reviews");
 
 // Роут для товаров
 app.use('/api/products', productsRoutes);
@@ -38,6 +40,9 @@ app.use('/api/countries', countriesRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/payment_methods', paymentMethodsRoute);
 app.use("/api", orderRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/reviews", reviewsRouter);
+
 
 app.get('/', async (req, res) => {
     try {

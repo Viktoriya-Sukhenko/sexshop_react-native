@@ -16,6 +16,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { API_BASE_URL } from "../config/config";
 import { useNavigation } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Toast from "react-native-toast-message";
+
 
 const HomeScreen = () => {
   const navigation = useNavigation();
@@ -128,35 +131,76 @@ const HomeScreen = () => {
   const renderProduct = ({ item }) => {
     const imageUrl = `${API_BASE_URL}/uploads/${item.image_url}`;
 
-    return (
-      <TouchableOpacity
-        style={styles.productCard}
-        onPress={() =>
-          navigation.navigate("Product", { product_id: item.product_id })
+    const handleAddToCart = async () => {
+      try {
+        const user = await AsyncStorage.getItem("user");
+        if (!user) {
+          console.error("Користувач не знайдений в AsyncStorage");
+          return;
         }
-      >
-        <Image source={{ uri: imageUrl }} style={styles.productImage} />
-        <View style={styles.productInfo}>
-          <Text style={styles.productName}>{item.name}</Text>
-          <Text style={styles.productDetails}>
-            Розмір: {item.size_name || "N/A"}
-          </Text>
-          <Text style={styles.productDetails}>
-            Країна: {item.country_name || "N/A"}
-          </Text>
-          <Text style={styles.productDetails}>
-            Колір: {item.color_name || "N/A"}
-          </Text>
+
+        const parsedUser = JSON.parse(user);
+        const cartId = parsedUser.cart_id;
+
+        if (!cartId) {
+          console.error("cart_id не знайдено для користувача.");
+          return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/cart`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cart_id: cartId,
+            product_id: item.product_id,
+            quantity: 1,
+          }),
+        });
+        if (!response.ok) {
+          console.error("Помилка додавання товару до корзини:", await response.text());
+        } else {
+          Toast.show({
+            type: "success",
+            text1: "Товар додано до корзини",
+            text2: `${item.name} успішно додано.`,
+          });
+        }
+      } catch (error) {
+        console.error("Помилка додавання товару до корзини:", error.message);
+      }
+    };
+
+    return (
+        <View style={styles.productCard}>
+            <TouchableOpacity
+                style={styles.productInfoContainer}
+                onPress={() =>
+                    navigation.navigate("Product", { product_id: item.product_id })
+                }
+            >
+                <Image source={{ uri: imageUrl }} style={styles.productImage} />
+                <View style={styles.productInfo}>
+                    <Text style={styles.productName}>{item.name}</Text>
+                    <Text style={styles.productDetails}>
+                        Розмір: {item.size_name || "N/A"}
+                    </Text>
+                    <Text style={styles.productDetails}>
+                        Країна: {item.country_name || "N/A"}
+                    </Text>
+                    <Text style={styles.productDetails}>
+                        Колір: {item.color_name || "N/A"}
+                    </Text>
+                </View>
+            </TouchableOpacity>
+            <View style={styles.productFooter}>
+                <Text style={styles.productPrice}>₴ {item.price}</Text>
+                <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
+                    <Ionicons name="cart" size={20} color="#fff" />
+                </TouchableOpacity>
+            </View>
         </View>
-        <View style={styles.productFooter}>
-          <Text style={styles.productPrice}>₴ {item.price}</Text>
-          <TouchableOpacity style={styles.addButton}>
-            <Ionicons name="cart" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
     );
-  };
+};
 
   if (loading) {
     return (

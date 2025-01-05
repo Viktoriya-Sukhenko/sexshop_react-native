@@ -4,6 +4,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, StyleSheet } from 'react-native';
+import Toast from 'react-native-toast-message';
+
 
 // Импорт экранов
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -16,12 +18,15 @@ import ProductList from '../screens/ProductList';
 import AddProduct from '../screens/AddProduct';
 import EditProduct from '../screens/EditProduct';
 import UserScreen from '../screens/UserScreen';
+import CartScreen from '../screens/CartScreen';
+
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const AppNavigator = () => {
   return (
+    <>
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="WelcomeScreen"
@@ -49,6 +54,8 @@ const AppNavigator = () => {
         <Stack.Screen name="EditProduct" component={EditProduct} />
       </Stack.Navigator>
     </NavigationContainer>
+    <Toast />
+    </>
   );
 };
 const BottomTabNavigator = () => {
@@ -81,7 +88,15 @@ const BottomTabNavigator = () => {
       })}
     >
       <Tab.Screen name="HomeScreen" component={HomeScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="UserScreen" component={UserScreen} options={{ headerShown: false }} />
+      <Tab.Screen
+    name="CartScreen"
+    component={CartScreen}
+    options={{
+        tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" size={size} color={color} />,
+        headerShown: false,
+    }}
+/>
+    <Tab.Screen name="UserScreen" component={UserScreen} options={{ headerShown: false }} />
     </Tab.Navigator>
   );
 };

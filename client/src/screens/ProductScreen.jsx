@@ -6,44 +6,32 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
-  Modal,
-  TextInput,
   TouchableOpacity,
+  FlatList,
   Alert,
+  TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker"; // Використовується для вибору рейтингу
 import { API_BASE_URL } from "../config/config";
+import Toast from "react-native-toast-message";
+import { LogBox } from "react-native";
+
+LogBox.ignoreLogs([
+  "VirtualizedLists should never be nested inside plain ScrollViews", // Попередження, яке потрібно приховати
+]);
 
 const ProductScreen = ({ route }) => {
   const { product_id } = route.params;
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isModalVisible, setModalVisible] = useState(false);
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [orderData, setOrderData] = useState({
-    phone_number: "",
-    address: "",
-    payment_method_id: null,
-  });
+  const [reviews, setReviews] = useState([]);
+  const [reviewText, setReviewText] = useState("");
+  const [rating, setRating] = useState(0);
+  const [submittingReview, setSubmittingReview] = useState(false);
 
-  const [userId, setUserId] = useState(null);
-  useEffect(() => {
-    const fetchUserId = async () => {
-      try {
-        const user = await AsyncStorage.getItem("user");
-        if (user) {
-          const parsedUser = JSON.parse(user);
-          setUserId(parsedUser.user_id);
-        }
-      } catch (error) {
-        console.error("Ошибка извлечения user_id из AsyncStorage:", error);
-      }
-    };
-
-    fetchUserId();
-  }, []);
-  // Завантаження деталей продукту
+  // Завантаження деталей продукту та відгуків
   useEffect(() => {
     const fetchProductDetails = async () => {
       try {
@@ -60,68 +48,110 @@ const ProductScreen = ({ route }) => {
       }
     };
 
-    fetchProductDetails();
-  }, [product_id]);
-
-  // Завантаження способів оплати
-  useEffect(() => {
-    const fetchPaymentMethods = async () => {
+    const fetchReviews = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/payment_methods`);
+        const response = await fetch(`${API_BASE_URL}/reviews?product_id=${product_id}`);
         if (!response.ok) {
-          throw new Error("Помилка завантаження способів оплати.");
+          throw new Error("Не вдалося завантажити відгуки.");
         }
         const data = await response.json();
-        setPaymentMethods(data);
-        if (data.length > 0) {
-          setOrderData((prev) => ({
-            ...prev,
-            payment_method_id: data[0].payment_method_id,
-          }));
-        }
+        setReviews(data);
       } catch (error) {
-        Alert.alert("Помилка", "Не вдалося завантажити способи оплати.");
+        console.error("Помилка завантаження відгуків:", error.message);
       }
     };
 
-    fetchPaymentMethods();
-  }, []);
+    fetchProductDetails();
+    fetchReviews();
+  }, [product_id]);
 
-  const handleOrderSubmit = async () => {
+  const handleAddToCart = async () => {
     try {
-      if (
-        !orderData.phone_number ||
-        !orderData.address ||
-        !orderData.payment_method_id
-      ) {
-        Alert.alert("Помилка", "Будь ласка, заповніть усі поля.");
+      const user = await AsyncStorage.getItem("user");
+      if (!user) {
+        console.error("Користувач не знайдений в AsyncStorage");
         return;
       }
 
-      const payload = {
-        user_id: userId,
-        product_id: product.product_id,
-        price: product.price,
-        phone_number: orderData.phone_number,
-        address: orderData.address,
-        payment_method_id: orderData.payment_method_id,
-      };
+      const parsedUser = JSON.parse(user);
+      const cartId = parsedUser.cart_id;
 
-      const response = await fetch(`${API_BASE_URL}/orders`, {
+      if (!cartId) {
+        console.error("cart_id не знайдено для користувача.");
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/cart`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          cart_id: cartId,
+          product_id: product.product_id,
+          quantity: 1,
+        }),
+      });
+      if (!response.ok) {
+        console.error("Помилка додавання товару до корзини:", await response.text());
+      } else {
+        Toast.show({
+          type: "success",
+          text1: "Товар додано до корзини",
+          text2: `${product.name} успішно додано.`,
+        });
+      }
+    } catch (error) {
+      console.error("Помилка додавання товару до корзини:", error.message);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewText || rating < 1 || rating > 5) {
+      Alert.alert("Помилка", "Будь ласка, введіть текст відгуку та виберіть рейтинг.");
+      return;
+    }
+
+    setSubmittingReview(true);
+
+    try {
+      const user = await AsyncStorage.getItem("user");
+      if (!user) {
+        console.error("Користувач не знайдений в AsyncStorage");
+        return;
+      }
+
+      const parsedUser = JSON.parse(user);
+
+      const response = await fetch(`${API_BASE_URL}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_id,
+          user_id: parsedUser.user_id,
+          text: reviewText,
+          rating,
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Не вдалося створити замовлення.");
+        const errorText = await response.text();
+        throw new Error(`Помилка: ${errorText}`);
       }
 
-      Alert.alert("Успіх", "Ваше замовлення успішно оформлено!");
-      setModalVisible(false);
+      Toast.show({
+        type: "success",
+        text1: "Відгук додано",
+        text2: "Дякуємо за ваш відгук!",
+      });
+
+      // Оновити список відгуків
+      const updatedReviews = await response.json();
+      setReviews(updatedReviews);
+      setReviewText("");
+      setRating(0);
     } catch (error) {
-      Alert.alert("Помилка", error.message);
+      console.error("Помилка додавання відгуку:", error.message);
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -153,112 +183,83 @@ const ProductScreen = ({ route }) => {
       <View style={styles.detailsContainer}>
         <Text style={styles.productName}>{product.name}</Text>
         <Text style={styles.productDescription}>{product.description}</Text>
-        <View style={styles.attributeRow}>
-          <Text style={styles.attributeLabel}>Категорія:</Text>
-          <Text style={styles.attributeValue}>{product.category_name}</Text>
-        </View>
-        <View style={styles.attributeRow}>
-          <Text style={styles.attributeLabel}>Колір:</Text>
-          <Text style={styles.attributeValue}>{product.color_name}</Text>
-        </View>
-        <View style={styles.attributeRow}>
-          <Text style={styles.attributeLabel}>Країна:</Text>
-          <Text style={styles.attributeValue}>{product.country_name}</Text>
-        </View>
-        <View style={styles.attributeRow}>
-          <Text style={styles.attributeLabel}>Розмір:</Text>
-          <Text style={styles.attributeValue}>{product.size_name}</Text>
-        </View>
-        <View style={styles.attributeRow}>
-          <Text style={styles.attributeLabel}>На складі:</Text>
-          <Text style={styles.attributeValue}>{product.stock} шт.</Text>
-        </View>
         <View style={styles.priceAndOrderContainer}>
-  <Text style={styles.productPrice}>₴ {product.price}</Text>
-  <TouchableOpacity
-    style={styles.orderButton}
-    onPress={() => setModalVisible(true)}
-  >
-    <Text style={styles.orderButtonText}>Замовити зараз</Text>
-  </TouchableOpacity>
-</View>
-
+          <Text style={styles.productPrice}>₴ {product.price}</Text>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
+            <Text style={styles.addButtonText}>Додати до корзини</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Modal visible={isModalVisible} transparent={true} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Оформлення замовлення</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ваш номер телефону"
-              placeholderTextColor="#A2A2A2"
-              keyboardType="phone-pad"
-              value={orderData.phone_number}
-              onChangeText={(text) =>
-                setOrderData({ ...orderData, phone_number: text })
-              }
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Адреса доставки"
-              placeholderTextColor="#A2A2A2"
-              value={orderData.address}
-              onChangeText={(text) =>
-                setOrderData({ ...orderData, address: text })
-              }
-            />
-            <ScrollView horizontal style={styles.paymentRow}>
-              {paymentMethods.map((method) => (
-                <TouchableOpacity
-                  key={method.payment_method_id}
-                  style={[
-                    styles.paymentMethodButton,
-                    orderData.payment_method_id === method.payment_method_id &&
-                      styles.selectedPaymentMethod,
-                  ]}
-                  onPress={() =>
-                    setOrderData({
-                      ...orderData,
-                      payment_method_id: method.payment_method_id,
-                    })
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.paymentMethodText,
-                      orderData.payment_method_id ===
-                        method.payment_method_id &&
-                        styles.selectedPaymentMethodText,
-                    ]}
-                  >
-                    {method.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.modalButtonText}>Скасувати</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.submitButton]}
-                onPress={handleOrderSubmit}
-              >
-                <Text style={styles.modalButtonText}>Підтвердити</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+      {/* Додавання відгуку */}
+      <View style={styles.addReviewContainer}>
+        <Text style={styles.sectionTitle}>Залишити відгук</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ваш відгук"
+          placeholderTextColor="#A2A2A2"
+          value={reviewText}
+          onChangeText={setReviewText}
+        />
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={rating}
+            onValueChange={(itemValue) => setRating(itemValue)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Оберіть рейтинг" value={0} />
+            <Picker.Item label="1 зірка" value={1} />
+            <Picker.Item label="2 зірки" value={2} />
+            <Picker.Item label="3 зірки" value={3} />
+            <Picker.Item label="4 зірки" value={4} />
+            <Picker.Item label="5 зірок" value={5} />
+          </Picker>
         </View>
-      </Modal>
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={handleSubmitReview}
+          disabled={submittingReview}
+        >
+          <Text style={styles.submitButtonText}>
+            {submittingReview ? "Відправка..." : "Додати відгук"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Відгуки */}
+      <View style={styles.reviewsContainer}>
+        <Text style={styles.sectionTitle}>Відгуки</Text>
+        {reviews.length === 0 ? (
+          <Text style={styles.noReviewsText}>Немає відгуків</Text>
+        ) : (
+          <FlatList
+            data={reviews}
+            keyExtractor={(item) => item.review_id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.reviewItem}>
+                <Text style={styles.reviewText}>{item.text}</Text>
+                <Text style={styles.reviewRating}>Рейтинг: {item.rating}</Text>
+              </View>
+            )}
+            nestedScrollEnabled
+          />
+        )}
+      </View>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
+  pickerContainer: {
+    backgroundColor: "#3A3A3A",
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  picker: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    height: 50,
+  },
   container: {
     flex: 1,
     backgroundColor: "#1A1A1A",
@@ -322,97 +323,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "bold",
   },
+  priceAndOrderContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 20,
+  },
   productPrice: {
     fontSize: 22,
     color: "#FF4C4C",
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
   },
-  orderButton: {
+  addButton: {
     backgroundColor: "#FF4C4C",
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  orderButtonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#2C2C2C",
-    borderRadius: 20,
-    padding: 25,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 22,
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  input: {
-    width: "100%",
-    padding: 15,
-    backgroundColor: "#3A3A3A",
-    color: "#FFFFFF",
-    borderRadius: 10,
-    marginBottom: 20,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#555",
-  },
-  paymentRow: {
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  paymentMethodButton: {
     paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: "#3A3A3A",
+    paddingHorizontal: 20,
     borderRadius: 12,
-    marginRight: 10,
     alignItems: "center",
   },
-  selectedPaymentMethod: {
-    backgroundColor: "#FF4C4C",
-  },
-  paymentMethodText: {
-    color: "#B3B3B3",
-    fontSize: 16,
-  },
-  selectedPaymentMethodText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  modalButton: {
-    flex: 0.48,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#555",
-  },
-  submitButton: {
-    backgroundColor: "#FF4C4C",
-  },
-  modalButtonText: {
+  addButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
@@ -434,32 +363,64 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 20,
   },
-  priceAndOrderContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  reviewsContainer: {
+    padding: 20,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 10,
+    marginHorizontal: 15,
     marginTop: 20,
-    paddingHorizontal: 10, // Відступи зліва та справа
   },
-  productPrice: {
-    fontSize: 22,
-    color: "#FF4C4C",
+  sectionTitle: {
+    fontSize: 18,
+    color: "#FFFFFF",
     fontWeight: "bold",
-    marginRight: 55, // Відступ між ціною і кнопкою
+    marginBottom: 10,
   },
-  orderButton: {
+  noReviewsText: {
+    color: "#B3B3B3",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  reviewItem: {
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#444",
+    paddingBottom: 10,
+  },
+  reviewText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+  reviewRating: {
+    fontSize: 14,
+    color: "#FF4C4C",
+  },
+  addReviewContainer: {
+    padding: 20,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 10,
+    marginHorizontal: 15,
+    marginTop: 20,
+  },
+  input: {
+    width: "100%",
+    padding: 15,
+    backgroundColor: "#3A3A3A",
+    color: "#FFFFFF",
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  submitButton: {
     backgroundColor: "#FF4C4C",
-    paddingVertical: 10,
-    paddingHorizontal: 20, // Ширина кнопки
-    borderRadius: 12,
+    paddingVertical: 15,
+    borderRadius: 10,
     alignItems: "center",
   },
-  orderButtonText: {
+  submitButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
   },
-  
 });
 
 export default ProductScreen;

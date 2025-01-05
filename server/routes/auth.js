@@ -47,6 +47,7 @@ router.post("/login", async (req, res) => {
         username: user.username,
         phone: user.phone,
         is_admin: user.is_admin,
+        cart_id: user.cart_id, // Включаем cart_id в ответ
         created_at: user.created_at,
         updated_at: user.updated_at,
       },
@@ -85,17 +86,29 @@ router.post("/register", async (req, res) => {
     // Хэшируем пароль перед сохранением
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Создаем пользователя
     const insertUserQuery = `INSERT INTO users (username, phone, password, is_admin) VALUES (?, ?, ?, ?)`;
     const [insertResult] = await db.query(insertUserQuery, [username, phone, hashedPassword, 0]);
+    const userId = insertResult.insertId;
+
+    // Создаем корзину для пользователя
+    const insertCartQuery = `INSERT INTO cart (user_id) VALUES (?)`;
+    const [cartResult] = await db.query(insertCartQuery, [userId]);
+    const cartId = cartResult.insertId;
+
+    // Обновляем пользователя, добавляя cart_id
+    const updateUserQuery = `UPDATE users SET cart_id = ? WHERE user_id = ?`;
+    await db.query(updateUserQuery, [cartId, userId]);
 
     return res.status(201).json({
       success: true,
       message: "Пользователь успешно зарегистрирован.",
       user: {
-        user_id: insertResult.insertId,
+        user_id: userId,
         username,
         phone,
         is_admin: 0,
+        cart_id: cartId,
       },
     });
   } catch (error) {
