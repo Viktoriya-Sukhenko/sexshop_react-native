@@ -7,10 +7,21 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Потрібен доступ до галереї для вибору зображення.",
+        "NSCameraUsageDescription": "Потрібен доступ до камери для зйомки зображення.",
+        "NSPhotoLibraryAddUsageDescription": "Потрібен доступ для збереження зображень."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "assetBundlePatterns": ["**/*"],
-    "android": {},
     "web": {},
     "plugins": ["expo-font"]
   }

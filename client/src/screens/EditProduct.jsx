@@ -1,7 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { launchImageLibrary } from 'react-native-image-picker';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  Alert,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { API_BASE_URL } from "../config/config";
 
 const EditProduct = ({ route, navigation }) => {
@@ -15,83 +25,259 @@ const EditProduct = ({ route, navigation }) => {
   const [price, setPrice] = useState(product.price.toString());
   const [description, setDescription] = useState(product.description);
   const [image, setImage] = useState(product.image_url);
+  const [size, setSize] = useState(product.size_id);
+  const [color, setColor] = useState(product.color_id);
+  const [country, setCountry] = useState(product.country_id);
+  const [category, setCategory] = useState(product.category_id);
+  const [stock, setStock] = useState(product.stock.toString());
 
-  const handleSelectImage = () => {
-    launchImageLibrary({ mediaType: 'photo' }, (response) => {
-      if (!response.didCancel && !response.errorCode) {
-        setImage(response.assets[0]);
+  const [sizes, setSizes] = useState([]);
+  const [colors, setColors] = useState([]);
+  const [countries, setCountries] = useState([]);
+  const [categories, setCategories] = useState([]);
+
+  const fetchAttributes = async () => {
+    try {
+      const [sizesRes, colorsRes, countriesRes, categoriesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/sizes`),
+        fetch(`${API_BASE_URL}/colors`),
+        fetch(`${API_BASE_URL}/countries`),
+        fetch(`${API_BASE_URL}/categories`),
+      ]);
+
+      setSizes(await sizesRes.json());
+      setColors(await colorsRes.json());
+      setCountries(await countriesRes.json());
+      setCategories(await categoriesRes.json());
+    } catch (error) {
+      console.error("Помилка завантаження атрибутів:", error.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttributes();
+  }, []);
+
+  const handleSelectImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Помилка", "Потрібен доступ до галереї для вибору зображення.");
+        return;
       }
-    });
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        const selectedImage = result.assets[0];
+        setImage({
+          uri: selectedImage.uri,
+          type: "image/jpeg",
+          name: selectedImage.uri.split("/").pop(),
+        });
+      } else {
+        Alert.alert("Скасовано", "Вибір зображення було скасовано.");
+      }
+    } catch (error) {
+      console.error("Помилка вибору зображення:", error);
+      Alert.alert("Помилка", "Не вдалося вибрати зображення.");
+    }
   };
 
   const handleEditProduct = async () => {
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('price', price);
-    formData.append('description', description);
+    formData.append("name", name);
+    formData.append("price", price);
+    formData.append("description", description);
+    formData.append("stock", stock);
+    formData.append("size_id", size);
+    formData.append("color_id", color);
+    formData.append("country_id", country);
+    formData.append("category_id", category);
 
     if (image && image.uri) {
-      formData.append('image', {
+      formData.append("image", {
         uri: image.uri,
-        type: image.type,
-        name: image.fileName,
+        type: image.type || "image/jpeg",
+        name: image.name || "image.jpg",
       });
     }
 
     try {
       const response = await fetch(`${API_BASE_URL}/products/${product.id}`, {
-        method: 'PUT',
+        method: "PUT",
         body: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
+      const responseData = await response.json();
+
       if (response.ok) {
-        alert('Товар успішно оновлено!');
+        Alert.alert("Успіх", "Товар успішно оновлено!");
         navigation.goBack();
       } else {
-        alert('Помилка при редагуванні товару!');
+        Alert.alert(
+          "Помилка",
+          `Помилка при редагуванні товару: ${responseData.error || "Невідома помилка"}`
+        );
       }
     } catch (error) {
-      console.error('Помилка:', error);
-      alert('Помилка підключення до сервера');
+      console.error("Помилка підключення до сервера:", error.message);
+      Alert.alert("Помилка", "Помилка підключення до сервера");
     }
   };
 
   return (
-    <LinearGradient colors={['#111111', '#313131']} style={styles.container}>
-      <Text style={styles.title}>Редагувати товар</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Назва товару"
-        placeholderTextColor="#A2A2A2"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Ціна"
-        placeholderTextColor="#A2A2A2"
-        keyboardType="numeric"
-        value={price}
-        onChangeText={setPrice}
-      />
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Опис"
-        placeholderTextColor="#A2A2A2"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-      />
-      {image && (
-        <Image source={{ uri: image.uri || image }} style={styles.imagePreview} />
-      )}
-      <TouchableOpacity style={styles.button} onPress={handleSelectImage}>
-        <Text style={styles.buttonText}>Вибрати зображення</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={handleEditProduct}>
-        <Text style={styles.buttonText}>Зберегти зміни</Text>
-      </TouchableOpacity>
+    <LinearGradient colors={["#111111", "#313131"]} style={styles.container}>
+      <ScrollView>
+        <Text style={styles.title}>Редагувати товар</Text>
+
+        <Text style={styles.label}>Назва товару</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Введіть назву товару"
+          placeholderTextColor="#A2A2A2"
+          value={name}
+          onChangeText={setName}
+        />
+
+        <Text style={styles.label}>Ціна</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Введіть ціну"
+          placeholderTextColor="#A2A2A2"
+          keyboardType="numeric"
+          value={price}
+          onChangeText={setPrice}
+        />
+
+        <Text style={styles.label}>Кількість на складі</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Введіть кількість на складі"
+          placeholderTextColor="#A2A2A2"
+          keyboardType="numeric"
+          value={stock}
+          onChangeText={setStock}
+        />
+
+        <Text style={styles.label}>Опис</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Введіть опис товару"
+          placeholderTextColor="#A2A2A2"
+          value={description}
+          onChangeText={setDescription}
+          multiline
+        />
+
+        <Text style={styles.label}>Категорія</Text>
+        <View style={styles.optionRow}>
+          {categories.map((c) => (
+            <TouchableOpacity
+              key={c.category_id}
+              style={[
+                styles.optionButton,
+                category === c.category_id && styles.selectedOption,
+              ]}
+              onPress={() => setCategory(c.category_id)}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  category === c.category_id && styles.selectedOptionText,
+                ]}
+              >
+                {c.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Розмір</Text>
+        <View style={styles.optionRow}>
+          {sizes.map((s) => (
+            <TouchableOpacity
+              key={s.size_id}
+              style={[
+                styles.optionButton,
+                size === s.size_id && styles.selectedOption,
+              ]}
+              onPress={() => setSize(s.size_id)}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  size === s.size_id && styles.selectedOptionText,
+                ]}
+              >
+                {s.size_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Колір</Text>
+        <View style={styles.optionRow}>
+          {colors.map((c) => (
+            <TouchableOpacity
+              key={c.color_id}
+              style={[
+                styles.optionButton,
+                color === c.color_id && styles.selectedOption,
+              ]}
+              onPress={() => setColor(c.color_id)}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  color === c.color_id && styles.selectedOptionText,
+                ]}
+              >
+                {c.color_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Країна</Text>
+        <View style={styles.optionRow}>
+          {countries.map((c) => (
+            <TouchableOpacity
+              key={c.country_id}
+              style={[
+                styles.optionButton,
+                country === c.country_id && styles.selectedOption,
+              ]}
+              onPress={() => setCountry(c.country_id)}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  country === c.country_id && styles.selectedOptionText,
+                ]}
+              >
+                {c.country_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {image && (
+          <Image source={{ uri: image.uri || image }} style={styles.imagePreview} />
+        )}
+        <TouchableOpacity style={styles.button} onPress={handleSelectImage}>
+          <Text style={styles.buttonText}>Вибрати зображення</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleEditProduct}>
+          <Text style={styles.buttonText}>Зберегти зміни</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </LinearGradient>
   );
 };
@@ -103,52 +289,82 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF', // Білий текст
-    marginBottom: 20,
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginTop: 30,
+    marginBottom: 30,
+    textAlign: "center",
   },
   input: {
-    backgroundColor: '#313131', // Темний фон
+    backgroundColor: "#313131",
     padding: 15,
     borderRadius: 10,
-    marginBottom: 15,
+    marginBottom: 20,
     fontSize: 16,
-    color: '#FFFFFF', // Білий текст
+    color: "#FFFFFF",
     borderWidth: 1,
-    borderColor: '#555',
+    borderColor: "#555",
   },
   textArea: {
-    height: 100, // Для багаторядкового тексту
+    height: 100,
   },
   button: {
-    backgroundColor: '#FF3B30', // Червоний фон
+    backgroundColor: "#FF3B30",
     padding: 15,
     borderRadius: 10,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
   },
   buttonText: {
-    color: '#FFFFFF', // Білий текст
+    color: "#FFFFFF",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   imagePreview: {
-    width: '100%',
+    width: "100%",
     height: 200,
     marginBottom: 15,
     borderRadius: 10,
-    resizeMode: 'cover',
+    resizeMode: "cover",
+  },
+  label: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginBottom: 10,
+  },
+  optionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 15,
+  },
+  optionButton: {
+    backgroundColor: "#313131",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  optionText: {
+    fontSize: 14,
+    color: "#A2A2A2",
+  },
+  selectedOption: {
+    backgroundColor: "#FF3B30",
+  },
+  selectedOptionText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
   },
   errorText: {
     fontSize: 18,
-    color: 'red',
-    textAlign: 'center',
+    color: "red",
+    textAlign: "center",
     marginTop: 20,
   },
 });

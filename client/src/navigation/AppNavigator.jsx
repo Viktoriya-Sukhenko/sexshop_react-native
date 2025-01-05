@@ -51,7 +51,6 @@ const AppNavigator = () => {
     </NavigationContainer>
   );
 };
-
 const BottomTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -66,7 +65,7 @@ const BottomTabNavigator = () => {
             iconName = focused ? 'person' : 'person-outline';
           }
 
-          // Возвращаем иконку
+          // Повертаємо іконку
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#FF3B30',
@@ -77,7 +76,8 @@ const BottomTabNavigator = () => {
           height: 60,
           paddingBottom: 10,
         },
-        tabBarShowLabel: false, // Убирает названия экранов
+        tabBarShowLabel: false, // Забирає назви екранів
+        tabBarHideOnKeyboard: false, // Запобігає прихованню меню
       })}
     >
       <Tab.Screen name="HomeScreen" component={HomeScreen} options={{ headerShown: false }} />

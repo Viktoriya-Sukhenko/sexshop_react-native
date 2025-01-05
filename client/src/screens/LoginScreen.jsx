@@ -59,7 +59,6 @@ const LoginScreen = ({ navigation }) => {
       const data = await response.json();
 
       if (data.success) {
-        Alert.alert("Успіх", "Ви успішно авторизовані.");
 
         // Збереження даних користувача в AsyncStorage
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
@@ -106,12 +105,13 @@ const LoginScreen = ({ navigation }) => {
             onChangeText={setPassword}
           />
 
-          <TouchableOpacity
-            onPress={() => Alert.alert("Забули пароль")}
-            style={styles.forgotPasswordContainer}
-          >
-            <Text style={styles.forgotPassword}>Забули пароль?</Text>
-          </TouchableOpacity>
+<TouchableOpacity
+  onPress={() => Alert.alert("Увага", "Ця функція знаходиться в розробці.")}
+  style={styles.forgotPasswordContainer}
+>
+  <Text style={styles.forgotPassword}>Забули пароль?</Text>
+</TouchableOpacity>
+
 
           <View style={styles.loginButtonContainer}>
             <TouchableOpacity

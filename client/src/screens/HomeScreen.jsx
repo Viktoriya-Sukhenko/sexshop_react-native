@@ -24,7 +24,6 @@ const HomeScreen = () => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState("Всі");
   const [modalVisible, setModalVisible] = useState(false);
 
   const [sizes, setSizes] = useState([]);
@@ -34,13 +33,16 @@ const HomeScreen = () => {
     size: null,
     color: null,
     country: null,
+    category: null, // Використовуємо category_id
   });
+
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchCategories = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/categories`);
       const data = await response.json();
-      setCategories([{ category_id: 0, name: "Всі" }, ...data]);
+      setCategories([{ category_id: null, name: "Всі" }, ...data]); // Додаємо "Всі"
     } catch (error) {
       console.error("Помилка завантаження категорій:", error.message);
     }
@@ -67,9 +69,18 @@ const HomeScreen = () => {
         fetch(`${API_BASE_URL}/countries`),
       ]);
 
-      const sizes = [{ size_id: null, size_name: "Всі" }, ...(await sizesRes.json())];
-      const colors = [{ color_id: null, color_name: "Всі" }, ...(await colorsRes.json())];
-      const countries = [{ country_id: null, country_name: "Всі" }, ...(await countriesRes.json())];
+      const sizes = [
+        { size_id: null, size_name: "Всі" },
+        ...(await sizesRes.json()),
+      ];
+      const colors = [
+        { color_id: null, color_name: "Всі" },
+        ...(await colorsRes.json()),
+      ];
+      const countries = [
+        { country_id: null, country_name: "Всі" },
+        ...(await countriesRes.json()),
+      ];
 
       setSizes(sizes);
       setColors(colors);
@@ -96,15 +107,27 @@ const HomeScreen = () => {
       const matchesCountry = selectedFilters.country
         ? product.country_id === selectedFilters.country
         : true;
+      const matchesCategory =
+        selectedFilters.category === null ||
+        product.category_id === selectedFilters.category;
 
-      return matchesSize && matchesColor && matchesCountry;
+      return matchesSize && matchesColor && matchesCountry && matchesCategory;
     });
     setFilteredProducts(filtered);
     setModalVisible(false);
   };
+
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    const searchedProducts = products.filter((product) =>
+      product.name.toLowerCase().includes(text.toLowerCase())
+    );
+    setFilteredProducts(searchedProducts);
+  };
+
   const renderProduct = ({ item }) => {
     const imageUrl = `${API_BASE_URL}/uploads/${item.image_url}`;
-  
+
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -115,20 +138,26 @@ const HomeScreen = () => {
         <Image source={{ uri: imageUrl }} style={styles.productImage} />
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{item.name}</Text>
-          <Text style={styles.productDetails}>Розмір: {item.size_name || "N/A"}</Text>
-          <Text style={styles.productDetails}>Країна: {item.country_name || "N/A"}</Text>
-          <Text style={styles.productDetails}>Колір: {item.color_name || "N/A"}</Text>
+          <Text style={styles.productDetails}>
+            Розмір: {item.size_name || "N/A"}
+          </Text>
+          <Text style={styles.productDetails}>
+            Країна: {item.country_name || "N/A"}
+          </Text>
+          <Text style={styles.productDetails}>
+            Колір: {item.color_name || "N/A"}
+          </Text>
         </View>
         <View style={styles.productFooter}>
           <Text style={styles.productPrice}>₴ {item.price}</Text>
           <TouchableOpacity style={styles.addButton}>
-            <Ionicons name="add" size={20} color="#fff" />
+            <Ionicons name="cart" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
   };
-  
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -140,30 +169,63 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={["#111111", "#313131"]} style={styles.headerGradient}>
+      <LinearGradient
+        colors={["#111111", "#313131"]}
+        style={styles.headerGradient}
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.storeTitle}>Сексшоп</Text>
             <Text style={styles.logoText}>120 ДНІВ СОДОМУ</Text>
           </View>
         </View>
-        <View style={styles.searchFilterContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Введіть товар"
-            placeholderTextColor="#A2A2A2"
-          />
+        <View style={styles.searchFilterWrapper}>
+          <View style={styles.searchContainer}>
+            <TouchableOpacity onPress={() => handleSearch(searchQuery)}>
+              <Ionicons
+                name="search"
+                size={20}
+                color="#A2A2A2"
+                style={styles.searchIcon}
+              />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.searchInputWithIcon}
+              placeholder="Введіть товар"
+              placeholderTextColor="#A2A2A2"
+              value={searchQuery}
+              onChangeText={(text) => {
+                setSearchQuery(text);
+                if (text === "") {
+                  setFilteredProducts(products); // Повернення до замовчування
+                }
+              }}
+              onSubmitEditing={() => handleSearch(searchQuery)} // Запускає пошук при натисканні Enter
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery("");
+                  setFilteredProducts(products); // Повернення до замовчування
+                }}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color="#A2A2A2"
+                  style={styles.clearIcon}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
             style={styles.filterButton}
-            onPress={() => {
-              setModalVisible(true);
-            }}
+            onPress={() => setModalVisible(true)}
           >
             <Ionicons name="filter" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </LinearGradient>
-
       <View style={styles.productsWrapper}>
         <FlatList
           data={filteredProducts}
@@ -174,139 +236,183 @@ const HomeScreen = () => {
           contentContainerStyle={{ paddingBottom: 10 }}
         />
       </View>
-
       <Modal
-  visible={modalVisible}
-  animationType="slide"
-  transparent={true}
-  onRequestClose={() => setModalVisible(false)}
->
-  <View style={styles.modalContainer}>
-    <View style={styles.modalContent}>
-      <TouchableOpacity
-        style={{ alignSelf: "flex-end", marginBottom: 10 }}
-        onPress={() => setModalVisible(false)}
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setModalVisible(false)}
       >
-        <Ionicons name="close" size={24} color="#fff" />
-      </TouchableOpacity>
-
-      <Text style={styles.modalTitle}>Фільтри</Text>
-
-      {/* Фільтри розмірів */}
-      <Text style={styles.filterLabel}>Розмір</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.filterRow}>
-          {sizes.map((size) => (
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
             <TouchableOpacity
-              key={size.size_id}
-              onPress={() =>
-                setSelectedFilters((prev) => ({ ...prev, size: size.size_id }))
-              }
-              style={[
-                styles.filterOptionHorizontal,
-                selectedFilters.size === size.size_id && styles.selectedOption,
-              ]}
+              style={{ alignSelf: "flex-end", marginBottom: 10 }}
+              onPress={() => setModalVisible(false)}
             >
-              <Text
-                style={[
-                  styles.filterOptionText,
-                  selectedFilters.size === size.size_id &&
-                    styles.selectedOptionText,
-                ]}
-              >
-                {size.size_name}
-              </Text>
+              <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
 
-      {/* Фільтри кольорів */}
-      <Text style={styles.filterLabel}>Колір</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.filterRow}>
-          {colors.map((color) => (
-            <TouchableOpacity
-              key={color.color_id}
-              onPress={() =>
-                setSelectedFilters((prev) => ({ ...prev, color: color.color_id }))
-              }
-              style={[
-                styles.filterOptionHorizontal,
-                selectedFilters.color === color.color_id && styles.selectedOption,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterOptionText,
-                  selectedFilters.color === color.color_id &&
-                    styles.selectedOptionText,
-                ]}
+            <Text style={styles.modalTitle}>Фільтри</Text>
+
+            {/* Фільтри категорій */}
+            <Text style={styles.filterLabel}>Категорії</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.filterRow}>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category.category_id}
+                    onPress={() =>
+                      setSelectedFilters((prev) => ({
+                        ...prev,
+                        category: category.category_id,
+                      }))
+                    }
+                    style={[
+                      styles.filterOptionHorizontal,
+                      selectedFilters.category === category.category_id &&
+                        styles.selectedOption,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        selectedFilters.category === category.category_id &&
+                          styles.selectedOptionText,
+                      ]}
+                    >
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Фільтри розмірів */}
+            <Text style={styles.filterLabel}>Розмір</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.filterRow}>
+                {sizes.map((size) => (
+                  <TouchableOpacity
+                    key={size.size_id}
+                    onPress={() =>
+                      setSelectedFilters((prev) => ({
+                        ...prev,
+                        size: size.size_id,
+                      }))
+                    }
+                    style={[
+                      styles.filterOptionHorizontal,
+                      selectedFilters.size === size.size_id &&
+                        styles.selectedOption,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        selectedFilters.size === size.size_id &&
+                          styles.selectedOptionText,
+                      ]}
+                    >
+                      {size.size_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Фільтри кольорів */}
+            <Text style={styles.filterLabel}>Колір</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.filterRow}>
+                {colors.map((color) => (
+                  <TouchableOpacity
+                    key={color.color_id}
+                    onPress={() =>
+                      setSelectedFilters((prev) => ({
+                        ...prev,
+                        color: color.color_id,
+                      }))
+                    }
+                    style={[
+                      styles.filterOptionHorizontal,
+                      selectedFilters.color === color.color_id &&
+                        styles.selectedOption,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        selectedFilters.color === color.color_id &&
+                          styles.selectedOptionText,
+                      ]}
+                    >
+                      {color.color_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Фільтри країн */}
+            <Text style={styles.filterLabel}>Країна</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.filterRow}>
+                {countries.map((country) => (
+                  <TouchableOpacity
+                    key={country.country_id}
+                    onPress={() =>
+                      setSelectedFilters((prev) => ({
+                        ...prev,
+                        country: country.country_id,
+                      }))
+                    }
+                    style={[
+                      styles.filterOptionHorizontal,
+                      selectedFilters.country === country.country_id &&
+                        styles.selectedOption,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionText,
+                        selectedFilters.country === country.country_id &&
+                          styles.selectedOptionText,
+                      ]}
+                    >
+                      {country.country_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Кнопки управління */}
+            <View style={styles.horizontalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.controlButton, styles.clearButton]}
+                onPress={() => {
+                  setSelectedFilters({
+                    size: null,
+                    color: null,
+                    country: null,
+                    category: null,
+                  });
+                }}
               >
-                {color.color_name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-
-      {/* Фільтри країн */}
-      <Text style={styles.filterLabel}>Країна</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.filterRow}>
-          {countries.map((country) => (
-            <TouchableOpacity
-              key={country.country_id}
-              onPress={() =>
-                setSelectedFilters((prev) => ({
-                  ...prev,
-                  country: country.country_id,
-                }))
-              }
-              style={[
-                styles.filterOptionHorizontal,
-                selectedFilters.country === country.country_id &&
-                  styles.selectedOption,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterOptionText,
-                  selectedFilters.country === country.country_id &&
-                    styles.selectedOptionText,
-                ]}
+                <Text style={styles.controlButtonText}>Очистити</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.controlButton, styles.applyButton]}
+                onPress={() => {
+                  applyFilters();
+                  setModalVisible(false);
+                }}
               >
-                {country.country_name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text style={styles.controlButtonText}>Застосувати</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </ScrollView>
-
-      {/* Кнопки управління */}
-      <View style={styles.horizontalButtonContainer}>
-        <TouchableOpacity
-          style={[styles.controlButton, styles.clearButton]}
-          onPress={() => {
-            setSelectedFilters({ size: null, color: null, country: null });
-          }}
-        >
-          <Text style={styles.controlButtonText}>Очистити</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.controlButton, styles.applyButton]}
-          onPress={() => {
-            applyFilters();
-            setModalVisible(false);
-          }}
-        >
-          <Text style={styles.controlButtonText}>Застосувати</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
-
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -330,31 +436,40 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   storeTitle: {
-    color: "#fff",
-    fontSize: 12,
+    color: "#a2a2a2",
+    fontSize: 10,
     fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   logoText: {
-    color: "#FF3B30",
+    color: "#fff",
     fontSize: 20,
     fontWeight: "600",
   },
-  searchFilterContainer: {
+  searchFilterWrapper: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginVertical: 15,
   },
-  searchInput: {
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    backgroundColor: "#1c1c1c",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    marginRight: 10, // Простір між полем вводу і кнопкою
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInputWithIcon: {
     flex: 1,
     height: 50,
-    paddingHorizontal: 15,
-    backgroundColor: "#1c1c1c",
     color: "#fff",
     fontSize: 16,
-    borderRadius: 12,
-    marginRight: 10,
   },
   filterButton: {
     width: 50,
@@ -522,6 +637,5 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-
 
 export default HomeScreen;

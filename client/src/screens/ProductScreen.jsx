@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../config/config";
 
 const ProductScreen = ({ route }) => {
@@ -27,6 +27,22 @@ const ProductScreen = ({ route }) => {
     payment_method_id: null,
   });
 
+  const [userId, setUserId] = useState(null);
+  useEffect(() => {
+    const fetchUserId = async () => {
+      try {
+        const user = await AsyncStorage.getItem("user");
+        if (user) {
+          const parsedUser = JSON.parse(user);
+          setUserId(parsedUser.user_id);
+        }
+      } catch (error) {
+        console.error("Ошибка извлечения user_id из AsyncStorage:", error);
+      }
+    };
+
+    fetchUserId();
+  }, []);
   // Завантаження деталей продукту
   useEffect(() => {
     const fetchProductDetails = async () => {
@@ -73,44 +89,41 @@ const ProductScreen = ({ route }) => {
 
   const handleOrderSubmit = async () => {
     try {
-      // Перевіряємо, чи завантажено продукт і чи є ID
-      if (!product || !product.id) {
-        Alert.alert("Помилка", "Продукт не завантажено або відсутній ID продукту.");
+      if (
+        !orderData.phone_number ||
+        !orderData.address ||
+        !orderData.payment_method_id
+      ) {
+        Alert.alert("Помилка", "Будь ласка, заповніть усі поля.");
         return;
       }
-  
+
       const payload = {
-        user_id: 1, // Замініть на фактичний ID користувача
-        product_id: product.id, // ID продукту
-        price: product.price, // Ціна продукту
+        user_id: userId,
+        product_id: product.product_id,
+        price: product.price,
         phone_number: orderData.phone_number,
         address: orderData.address,
         payment_method_id: orderData.payment_method_id,
       };
-  
-      console.log("Дані, які відправляються на сервер:", payload);
-  
+
       const response = await fetch(`${API_BASE_URL}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("Сервер повернув помилку:", errorData);
         throw new Error(errorData.error || "Не вдалося створити замовлення.");
       }
-  
-      const data = await response.json();
+
       Alert.alert("Успіх", "Ваше замовлення успішно оформлено!");
       setModalVisible(false);
     } catch (error) {
-      console.error("Помилка під час створення замовлення:", error.message);
       Alert.alert("Помилка", error.message);
     }
   };
-  
 
   if (loading) {
     return (
@@ -133,28 +146,43 @@ const ProductScreen = ({ route }) => {
 
   return (
     <ScrollView style={styles.container}>
-      <LinearGradient
-        colors={["#111111", "#313131"]}
-        style={styles.headerGradient}
-      >
-        <Text style={styles.productName}>{product.name}</Text>
-      </LinearGradient>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerText}>Деталі товару</Text>
+      </View>
       <Image source={{ uri: imageUrl }} style={styles.productImage} />
       <View style={styles.detailsContainer}>
-        <Text style={styles.productPrice}>₴ {product.price}</Text>
+        <Text style={styles.productName}>{product.name}</Text>
         <Text style={styles.productDescription}>{product.description}</Text>
-        <View style={styles.extraDetails}>
-          <Text style={styles.extraText}>На складі: {product.stock} шт.</Text>
-          <Text style={styles.extraText}>
-            Категорія ID: {product.category_id}
-          </Text>
+        <View style={styles.attributeRow}>
+          <Text style={styles.attributeLabel}>Категорія:</Text>
+          <Text style={styles.attributeValue}>{product.category_name}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.orderButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Text style={styles.orderButtonText}>Замовити зараз</Text>
-        </TouchableOpacity>
+        <View style={styles.attributeRow}>
+          <Text style={styles.attributeLabel}>Колір:</Text>
+          <Text style={styles.attributeValue}>{product.color_name}</Text>
+        </View>
+        <View style={styles.attributeRow}>
+          <Text style={styles.attributeLabel}>Країна:</Text>
+          <Text style={styles.attributeValue}>{product.country_name}</Text>
+        </View>
+        <View style={styles.attributeRow}>
+          <Text style={styles.attributeLabel}>Розмір:</Text>
+          <Text style={styles.attributeValue}>{product.size_name}</Text>
+        </View>
+        <View style={styles.attributeRow}>
+          <Text style={styles.attributeLabel}>На складі:</Text>
+          <Text style={styles.attributeValue}>{product.stock} шт.</Text>
+        </View>
+        <View style={styles.priceAndOrderContainer}>
+  <Text style={styles.productPrice}>₴ {product.price}</Text>
+  <TouchableOpacity
+    style={styles.orderButton}
+    onPress={() => setModalVisible(true)}
+  >
+    <Text style={styles.orderButtonText}>Замовити зараз</Text>
+  </TouchableOpacity>
+</View>
+
       </View>
 
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
@@ -180,14 +208,10 @@ const ProductScreen = ({ route }) => {
                 setOrderData({ ...orderData, address: text })
               }
             />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.paymentRow}
-            >
+            <ScrollView horizontal style={styles.paymentRow}>
               {paymentMethods.map((method) => (
                 <TouchableOpacity
-                  key={`method-${method.payment_method_id}`}
+                  key={method.payment_method_id}
                   style={[
                     styles.paymentMethodButton,
                     orderData.payment_method_id === method.payment_method_id &&
@@ -234,97 +258,105 @@ const ProductScreen = ({ route }) => {
   );
 };
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111111",
+    backgroundColor: "#1A1A1A",
   },
-  headerGradient: {
-    paddingVertical: 20,
-    paddingHorizontal: 15,
+  headerContainer: {
+    marginTop: 50,
+    marginBottom: 20,
     alignItems: "center",
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginBottom: 15,
   },
-  productName: {
+  headerText: {
     fontSize: 24,
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "bold",
-    textAlign: "center",
   },
   productImage: {
     width: "100%",
-    height: 250,
+    height: 300,
     resizeMode: "contain",
-    marginBottom: 15,
+    marginBottom: 20,
   },
   detailsContainer: {
     padding: 20,
-    backgroundColor: "#313131",
-    borderRadius: 15,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 20,
     marginHorizontal: 15,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
-  productPrice: {
-    fontSize: 22,
-    color: "#FF3B30",
+  productName: {
+    fontSize: 24,
+    color: "#FFFFFF",
     fontWeight: "bold",
-    marginBottom: 10,
     textAlign: "center",
+    marginBottom: 20,
   },
   productDescription: {
     fontSize: 16,
-    color: "#a2a2a2",
+    color: "#B3B3B3",
     lineHeight: 24,
     marginBottom: 20,
-    textAlign: "center",
+    textAlign: "justify",
   },
-  extraDetails: {
+  attributeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#555",
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#444",
+    paddingBottom: 10,
   },
-  extraText: {
-    fontSize: 14,
-    color: "#a2a2a2",
+  attributeLabel: {
+    fontSize: 16,
+    color: "#B3B3B3",
+    fontWeight: "600",
+  },
+  attributeValue: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  productPrice: {
+    fontSize: 22,
+    color: "#FF4C4C",
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
   },
   orderButton: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: "#FF4C4C",
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   orderButtonText: {
-    color: "#fff",
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "bold",
   },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
   },
   modalContent: {
     width: "90%",
-    backgroundColor: "#1c1c1c",
-    borderRadius: 15,
-    padding: 20,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 20,
+    padding: 25,
     alignItems: "center",
   },
   modalTitle: {
-    fontSize: 20,
-    color: "#fff",
+    fontSize: 22,
+    color: "#FFFFFF",
     fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
@@ -332,12 +364,36 @@ const styles = StyleSheet.create({
   input: {
     width: "100%",
     padding: 15,
-    backgroundColor: "#313131",
-    color: "#fff",
+    backgroundColor: "#3A3A3A",
+    color: "#FFFFFF",
     borderRadius: 10,
-    marginBottom: 15,
+    marginBottom: 20,
+    fontSize: 16,
     borderWidth: 1,
     borderColor: "#555",
+  },
+  paymentRow: {
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  paymentMethodButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: "#3A3A3A",
+    borderRadius: 12,
+    marginRight: 10,
+    alignItems: "center",
+  },
+  selectedPaymentMethod: {
+    backgroundColor: "#FF4C4C",
+  },
+  paymentMethodText: {
+    color: "#B3B3B3",
+    fontSize: 16,
+  },
+  selectedPaymentMethodText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
   },
   buttonRow: {
     flexDirection: "row",
@@ -354,68 +410,56 @@ const styles = StyleSheet.create({
     backgroundColor: "#555",
   },
   submitButton: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: "#FF4C4C",
   },
   modalButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "bold",
-  },
-  paymentLabel: {
-    fontSize: 18,
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  paymentMethodButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: "#313131", // Неактивний стан
-    borderRadius: 10,
-    marginRight: 10,
-    alignItems: "center",
-  },
-  selectedPaymentMethod: {
-    backgroundColor: "#FF3B30", // Активний стан
-  },
-  paymentMethodText: {
-    color: "#A2A2A2", // Текст для неактивного стану
-    fontSize: 16,
-  },
-  paymentRow: {
-    marginBottom: 20, // Збільшуємо відступ між списком варіантів оплати і кнопками
-    paddingHorizontal: 10, // Додаємо горизонтальний відступ для прокрутки
-  },
-  
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    marginTop: 20, // Збільшуємо відступ між списком оплати і кнопками
-  },
-  
-  selectedPaymentMethodText: {
-    color: "#fff", // Текст для активного стану
     fontWeight: "bold",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#111111",
+    backgroundColor: "#1A1A1A",
   },
   loadingText: {
     marginTop: 10,
-    fontSize: 16,
-    color: "#fff",
+    fontSize: 18,
+    color: "#FFFFFF",
   },
   errorText: {
     fontSize: 18,
-    color: "red",
+    color: "#FF4C4C",
     textAlign: "center",
     marginTop: 20,
   },
+  priceAndOrderContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 20,
+    paddingHorizontal: 10, // Відступи зліва та справа
+  },
+  productPrice: {
+    fontSize: 22,
+    color: "#FF4C4C",
+    fontWeight: "bold",
+    marginRight: 55, // Відступ між ціною і кнопкою
+  },
+  orderButton: {
+    backgroundColor: "#FF4C4C",
+    paddingVertical: 10,
+    paddingHorizontal: 20, // Ширина кнопки
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  orderButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  
 });
 
 export default ProductScreen;
